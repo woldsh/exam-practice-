@@ -122069,7 +122069,7 @@
             const btn = document.createElement("button");
             btn.className = "btn";
             const label = university || selectedSubject;
-            btn.textContent = `${label} (${year || "Year unavailable"})`;
+            btn.textContent = `${label} (${year || "-"})`;
             btn.onclick = () =>
               startQuiz("fullExam", { year, university: university || null });
             fullExamsOptions.appendChild(btn);
@@ -122081,21 +122081,26 @@
         chapterNumberSelection.innerHTML = "";
 
         const examData = allExams[selectedSubject] || [];
-        const chaptersWithQuestions = new Set();
+        const chaptersWithQuestions = new Map();
 
         examData.forEach((item) => {
-          if (item.assignments) {
-            item.assignments.forEach((assign) => {
-              const chapter = String(assign.chapter ?? "").trim();
-              if (
-                chapter &&
-                chapter !== "undefined" &&
-                chapter !== "null"
-              ) {
-                chaptersWithQuestions.add(chapter);
-              }
-            });
-          }
+          (item.assignments || []).forEach((assign) => {
+            const chapter = String(assign.chapter ?? "").trim();
+            if (!chapter || chapter === "undefined" || chapter === "null")
+              return;
+
+            const assignedGrade = String(assign.grade ?? "").trim();
+            const grade = /^(9|10|11|12)$/.test(assignedGrade)
+              ? assignedGrade
+              : null;
+            const curriculum = grade
+              ? String(assign.curriculum ?? "null").trim().toLowerCase()
+              : "null";
+            const key = JSON.stringify([chapter, grade, curriculum]);
+            if (!chaptersWithQuestions.has(key)) {
+              chaptersWithQuestions.set(key, { chapter, grade, curriculum });
+            }
+          });
         });
 
         const meta =
@@ -122112,35 +122117,37 @@
           return;
         }
 
-        Array.from(chaptersWithQuestions)
-          .sort((a, b) => Number(a) - Number(b))
-          .forEach((chapterNum) => {
+        Array.from(chaptersWithQuestions.values())
+          .sort(
+            (a, b) =>
+              Number(a.chapter) - Number(b.chapter) ||
+              Number(a.grade || 0) - Number(b.grade || 0) ||
+              a.curriculum.localeCompare(b.curriculum),
+          )
+          .forEach(({ chapter, grade, curriculum }) => {
             const btn = document.createElement("button");
             btn.className = "btn";
-            const chapterIndex = Number(chapterNum) - 1;
-            const chapterNames =
-              chapterNamesArray[chapterIndex] ||
-              [
-                ...new Set(
-                  Object.values(chapterNamesDict)
-                    .map((names) => names[chapterIndex])
-                    .filter(Boolean),
-                ),
-              ];
-            const chapterName =
-              typeof chapterNames === "string"
-                ? chapterNames
-                : chapterNames.length === 1
-                  ? chapterNames[0]
-                  : "";
-            btn.textContent = chapterName
-              ? `Chapter ${chapterNum}: ${chapterName}`
-              : `Chapter ${chapterNum}`;
+            const chapterKey = grade
+              ? grade === "9" && curriculum !== "null"
+                ? `g9_${curriculum}`
+                : `g${grade}`
+              : "all";
+            const names =
+              chapterNamesDict[chapterKey] || chapterNamesArray;
+            const chapterName = names[Number(chapter) - 1] || "";
+            const chapterTitle = chapterName
+              ? `Chapter ${chapter}: ${chapterName}`
+              : `Chapter ${chapter}`;
+            const gradeTitle = grade
+              ? `Grade ${grade}${curriculum !== "null" ? ` (${curriculum})` : ""} — `
+              : "";
+            btn.textContent = `${gradeTitle}${chapterTitle}`;
             btn.onclick = () =>
               startQuiz("chapter", {
-                chapterFilter: chapterNum,
+                chapterFilter: chapter,
+                chapterGrade: grade,
                 gradeFilter: "all",
-                curriculumFilter: "null",
+                curriculumFilter: curriculum,
               });
             chapterNumberSelection.appendChild(btn);
           });
@@ -122173,7 +122180,32 @@
 
               const matchesChapter =
                 String(assign.chapter) === String(filters.chapterFilter);
-              if (filters.gradeFilter === "all") return matchesChapter;
+              if (filters.gradeFilter === "all") {
+                if (
+                  !Object.prototype.hasOwnProperty.call(
+                    filters,
+                    "chapterGrade",
+                  )
+                ) {
+                  return matchesChapter;
+                }
+
+                const assignedGrade = String(assign.grade ?? "").trim();
+                const grade = /^(9|10|11|12)$/.test(assignedGrade)
+                  ? assignedGrade
+                  : null;
+                if (filters.chapterGrade === null) {
+                  return matchesChapter && grade === null;
+                }
+                if (grade !== filters.chapterGrade) return false;
+
+                const curriculum = String(
+                  assign.curriculum ?? "null",
+                ).trim().toLowerCase();
+                return (
+                  matchesChapter && curriculum === filters.curriculumFilter
+                );
+              }
 
               let assignCurr = assign.curriculum
                 ? String(assign.curriculum)
@@ -122229,7 +122261,7 @@
         } else {
           currentQuizId =
             filters.gradeFilter === "all"
-              ? `${selectedSubject} - Chapter ${filters.chapterFilter}`
+              ? `${selectedSubject} - ${filters.chapterGrade ? `Grade ${filters.chapterGrade} ${filters.curriculumFilter !== "null" ? `(${filters.curriculumFilter}) ` : ""}` : ""}Chapter ${filters.chapterFilter}`
               : `${selectedSubject} - Grade ${filters.gradeFilter} Chapter ${filters.chapterFilter}`;
         }
 

@@ -935,15 +935,11 @@
       </div>
       <div id="fullExamsContainer" class="hidden">
         <h3 class="section-title" id="fullExamSelectionTitle">
-          Select Exam Year
+          Select University (Exam Year)
         </h3>
         <div class="btn-grid" id="fullExamsOptions"></div>
       </div>
       <div id="chaptersContainer" class="hidden">
-        <div id="gradeSelectionContainer">
-          <h3 class="section-title">Select Grade</h3>
-          <div class="btn-grid" id="gradeSelection"></div>
-        </div>
         <div id="chapterNumberContainer" class="hidden">
           <h3 class="section-title">Select Chapter</h3>
           <div class="btn-grid" id="chapterNumberSelection"></div>
@@ -121714,10 +121710,6 @@
       const fullExamsContainer = document.getElementById("fullExamsContainer");
       const fullExamsOptions = document.getElementById("fullExamsOptions");
       const chaptersContainer = document.getElementById("chaptersContainer");
-      const gradeSelectionContainer = document.getElementById(
-        "gradeSelectionContainer",
-      );
-      const gradeSelection = document.getElementById("gradeSelection");
       const chapterNumberContainer = document.getElementById(
         "chapterNumberContainer",
       );
@@ -122008,13 +122000,6 @@
       /* ========================================================================
            DYNAMIC MENUS LOGIC (FIXED CHAPTERS ISSUE)
            ======================================================================== */
-      function getGradeKey(grade, curriculum) {
-        if (grade === "all") return "all"; // Fixes the "Unknown Chapter" for Emerging/SAT
-        if (grade === "9" && curriculum && curriculum !== "null")
-          return "g9_" + curriculum;
-        return "g" + grade;
-      }
-
       document.querySelectorAll(".subject-btn").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           selectedSubject = e.target.dataset.subject;
@@ -122043,139 +122028,55 @@
         .addEventListener("click", () => {
           fullExamsContainer.classList.add("hidden");
           chaptersContainer.classList.remove("hidden");
-
-          // Check if the subject uses grades
-          const meta = subjectMetadata[selectedSubject] || {};
-          if (meta.gradeStructure === "none") {
-            // Skip Grade selection completely and load chapters directly
-            gradeSelectionContainer.classList.add("hidden");
-            populateChaptersForGrade("all", "null");
-          } else {
-            // Show Grade selection for subjects like Math, Physics, etc.
-            gradeSelectionContainer.classList.remove("hidden");
-            chapterNumberContainer.classList.add("hidden");
-            populateGradeButtons();
-          }
+          populateChapterButtons();
         });
+
+      function getExamYear(item) {
+        return item.examYear ? String(item.examYear).trim() : null;
+      }
+
+      function normalizeUniversity(university) {
+        if (typeof university !== "string") return "";
+        const normalized = university.trim().replace(/\s+/g, " ");
+        return normalized.toLowerCase() === "unknown" ? "" : normalized;
+      }
 
       function populateYearButtons() {
         fullExamsOptions.innerHTML = "";
         const examData = allExams[selectedSubject] || [];
-
-        if (selectedSubject === "Emerging") {
-          document.getElementById("fullExamSelectionTitle").textContent =
-            "Select University (Exam Year)";
-
-          const exams = new Map();
-          examData.forEach((item) => {
-            if (!item.examYear || !item.university) return;
-
-            const university = item.university.trim().replace(/\s+/g, " ");
-            const key = JSON.stringify([university, item.examYear]);
-            if (!exams.has(key)) {
-              exams.set(key, { university, year: item.examYear });
-            }
-          });
-
-          [...exams.values()]
-            .sort(
-              (a, b) =>
-                Number(b.year) - Number(a.year) ||
-                a.university.localeCompare(b.university),
-            )
-            .forEach(({ university, year }) => {
-              const btn = document.createElement("button");
-              btn.className = "btn";
-              btn.textContent = `${university} (${year})`;
-              btn.onclick = () =>
-                startQuiz("fullExam", { year, university });
-              fullExamsOptions.appendChild(btn);
-            });
-          return;
-        }
-
         document.getElementById("fullExamSelectionTitle").textContent =
-          "Select Exam Year";
-        const years = [
-          ...new Set(examData.map((q) => q.examYear).filter(Boolean)),
-        ].sort((a, b) => b - a);
-        years.forEach((year) => {
-          const btn = document.createElement("button");
-          btn.className = "btn";
-          btn.textContent = year;
-          btn.onclick = () => startQuiz("fullExam", { year });
-          fullExamsOptions.appendChild(btn);
-        });
-      }
+          "Select University (Exam Year)";
 
-      // FIX: Dynamically scan 'allExams' to generate Grades to guarantee chapters show up
-      function populateGradeButtons() {
-        gradeSelection.innerHTML = "";
-        const examData = allExams[selectedSubject] || [];
-        const availableGrades = new Set();
-
+        const exams = new Map();
         examData.forEach((item) => {
-          if (item.assignments) {
-            item.assignments.forEach((assign) => {
-              // 1. Completely ignore Grade 10 Old Curriculum
-              if (
-                String(assign.grade) === "10" &&
-                String(assign.curriculum) === "old"
-              )
-                return;
-
-              // FIX: Force convert to string, remove spaces, and make lowercase
-              let grade = assign.grade ? String(assign.grade).trim() : "null";
-              let curriculum = assign.curriculum
-                ? String(assign.curriculum).trim().toLowerCase()
-                : "null";
-
-              // 2. Force Grade 10 (New) to act like it has no curriculum attached
-              if (grade === "10") curriculum = "null";
-
-              if (grade !== "null") {
-                availableGrades.add(
-                  JSON.stringify({
-                    grade: grade,
-                    curriculum: curriculum,
-                  }),
-                );
-              }
-            });
+          const university = normalizeUniversity(item.university);
+          const year = getExamYear(item);
+          const key = JSON.stringify([university, year]);
+          if (!exams.has(key)) {
+            exams.set(key, { university, year });
           }
         });
 
-        if (availableGrades.size === 0) {
-          gradeSelection.innerHTML =
-            '<p style="color: var(--text-muted);">No grades found for this subject.</p>';
-          return;
-        }
-
-        const gradesArray = Array.from(availableGrades).map((g) =>
-          JSON.parse(g),
-        );
-
-        gradesArray.sort((a, b) => {
-          if (a.grade === b.grade)
-            return a.curriculum.localeCompare(b.curriculum);
-          return parseInt(a.grade) - parseInt(b.grade);
-        });
-
-        gradesArray.forEach((g) => {
-          const btn = document.createElement("button");
-          btn.className = "btn";
-          let label = `Grade ${g.grade}`;
-
-          if (g.curriculum !== "null")
-            label += ` (${g.curriculum.charAt(0).toUpperCase() + g.curriculum.slice(1)})`;
-
-          btn.textContent = label;
-          btn.onclick = () => populateChaptersForGrade(g.grade, g.curriculum);
-          gradeSelection.appendChild(btn);
-        });
+        [...exams.values()]
+          .sort((a, b) => {
+            if (a.year && b.year && a.year !== b.year) {
+              return Number(b.year) - Number(a.year);
+            }
+            if (a.year !== b.year) return a.year ? -1 : 1;
+            return a.university.localeCompare(b.university);
+          })
+          .forEach(({ university, year }) => {
+            const btn = document.createElement("button");
+            btn.className = "btn";
+            const label = university || selectedSubject;
+            btn.textContent = `${label} (${year || "Year unavailable"})`;
+            btn.onclick = () =>
+              startQuiz("fullExam", { year, university: university || null });
+            fullExamsOptions.appendChild(btn);
+          });
       }
-      function populateChaptersForGrade(grade, curriculum) {
-        gradeSelectionContainer.classList.add("hidden");
+
+      function populateChapterButtons() {
         chapterNumberContainer.classList.remove("hidden");
         chapterNumberSelection.innerHTML = "";
 
@@ -122185,38 +122086,25 @@
         examData.forEach((item) => {
           if (item.assignments) {
             item.assignments.forEach((assign) => {
-              // 1. Ignore Grade 10 Old Curriculum
+              const chapter = String(assign.chapter ?? "").trim();
               if (
-                String(assign.grade) === "10" &&
-                String(assign.curriculum) === "old"
-              )
-                return;
-
-              let assignCurr = assign.curriculum
-                ? String(assign.curriculum)
-                : "null";
-
-              // 2. Force matching for Grade 10
-              if (String(assign.grade) === "10") assignCurr = "null";
-
-              if (
-                String(assign.grade) === String(grade) &&
-                assignCurr === String(curriculum)
+                chapter &&
+                chapter !== "undefined" &&
+                chapter !== "null"
               ) {
-                chaptersWithQuestions.add(assign.chapter);
+                chaptersWithQuestions.add(chapter);
               }
             });
           }
         });
 
-        const gradeKey = getGradeKey(grade, curriculum);
         const meta =
           typeof subjectMetadata !== "undefined" &&
           subjectMetadata[selectedSubject]
             ? subjectMetadata[selectedSubject]
             : {};
         const chapterNamesDict = meta.chapterNames || {};
-        const chapterNamesArray = chapterNamesDict[gradeKey] || [];
+        const chapterNamesArray = chapterNamesDict.all || [];
 
         if (chaptersWithQuestions.size === 0) {
           chapterNumberSelection.innerHTML =
@@ -122225,18 +122113,34 @@
         }
 
         Array.from(chaptersWithQuestions)
-          .sort((a, b) => a - b)
+          .sort((a, b) => Number(a) - Number(b))
           .forEach((chapterNum) => {
             const btn = document.createElement("button");
             btn.className = "btn";
-            const chapName =
-              chapterNamesArray[chapterNum - 1] || "Unknown Chapter";
-            btn.textContent = `Chapter ${chapterNum}: ${chapName}`;
+            const chapterIndex = Number(chapterNum) - 1;
+            const chapterNames =
+              chapterNamesArray[chapterIndex] ||
+              [
+                ...new Set(
+                  Object.values(chapterNamesDict)
+                    .map((names) => names[chapterIndex])
+                    .filter(Boolean),
+                ),
+              ];
+            const chapterName =
+              typeof chapterNames === "string"
+                ? chapterNames
+                : chapterNames.length === 1
+                  ? chapterNames[0]
+                  : "";
+            btn.textContent = chapterName
+              ? `Chapter ${chapterNum}: ${chapterName}`
+              : `Chapter ${chapterNum}`;
             btn.onclick = () =>
               startQuiz("chapter", {
                 chapterFilter: chapterNum,
-                gradeFilter: grade,
-                curriculumFilter: curriculum,
+                gradeFilter: "all",
+                curriculumFilter: "null",
               });
             chapterNumberSelection.appendChild(btn);
           });
@@ -122249,35 +122153,39 @@
         const examData = allExams[selectedSubject] || [];
         questions = examData.filter((item) => {
           if (mode === "fullExam") {
-            const matchesYear = item.examYear === filters.year;
+            const matchesYear = getExamYear(item) === (filters.year || null);
             const matchesUniversity =
-              !filters.university ||
-              (item.university || "").trim().replace(/\s+/g, " ") ===
-                filters.university;
+              filters.university === undefined ||
+              normalizeUniversity(item.university) ===
+                (filters.university || "");
             return matchesYear && matchesUniversity;
           }
 
           if (mode === "chapter") {
             if (!item.assignments) return false;
             return item.assignments.some((assign) => {
-              // 1. Ignore Grade 10 Old Curriculum
               if (
+                filters.gradeFilter !== "all" &&
                 String(assign.grade) === "10" &&
                 String(assign.curriculum) === "old"
               )
                 return false;
 
+              const matchesChapter =
+                String(assign.chapter) === String(filters.chapterFilter);
+              if (filters.gradeFilter === "all") return matchesChapter;
+
               let assignCurr = assign.curriculum
                 ? String(assign.curriculum)
                 : "null";
 
-              // 2. Force matching for Grade 10
+              // Grade 10 assignments do not use curriculum filters.
               if (String(assign.grade) === "10") assignCurr = "null";
 
               return (
                 String(assign.grade) === String(filters.gradeFilter) &&
                 assignCurr === String(filters.curriculumFilter) &&
-                String(assign.chapter) === String(filters.chapterFilter)
+                matchesChapter
               );
             });
           }
@@ -122315,9 +122223,9 @@
 
         // FIX: Remove "Grade all" from the title for Emerging/SAT
         if (mode === "fullExam") {
-          currentQuizId = filters.university
-            ? `${selectedSubject} - ${filters.university} (${filters.year}) Exam`
-            : `${selectedSubject} - ${filters.year} Exam`;
+          const examLabel = filters.university || selectedSubject;
+          const examYear = filters.year || "Year unavailable";
+          currentQuizId = `${examLabel} (${examYear}) Exam`;
         } else {
           currentQuizId =
             filters.gradeFilter === "all"
@@ -122457,7 +122365,12 @@
             }
 
             // Format question text and explanation to handle \n
-            let formattedQuestionText = item.text.replace(/\n/g, "<br>");
+            let formattedQuestionText = item.text
+              .replace(
+                /^\s*(?:(?:question|q)\s*)?(?:\(\s*\d{1,3}\s*\)|\d{1,3}[.):\-])\s*/i,
+                "",
+              )
+              .replace(/\n/g, "<br>");
             let formattedExplanation = (
               item.explanation || "No explanation provided."
             ).replace(/\n/g, "<br>");
